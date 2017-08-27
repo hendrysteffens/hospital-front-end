@@ -1,6 +1,5 @@
 angular.module('starter.controllers', [])
-  .controller('MapCtrl', function ($scope, $ionicLoading) {
-    $scope.infoBoxs = [];
+  .controller('MapCtrl', function ($scope, $ionicLoading, $http) {
     var directionsService;
     var directionsDisplay;
     var hospitalImg = 'http://maps.google.com/mapfiles/kml/pal4/icon55.png';
@@ -29,32 +28,42 @@ angular.module('starter.controllers', [])
         return;
       }
 
-      directionsService = new google.maps.DirectionsService();
-      directionsDisplay = new google.maps.DirectionsRenderer();
+      $scope.infoBoxs = [];
+      $scope.markes = [];
 
-      getNeabyHospitals($scope.currentPosition.latitude, $scope.currentPositionlongitude);
+      $http.get('http://localhost:48462/v1/json/events?limit=5000&timeout=5').then(
+        apiData => {
 
-      var nearbyHospitals = getNeabyHospitals().results;
+          directionsService = new google.maps.DirectionsService();
+          directionsDisplay = new google.maps.DirectionsRenderer();
 
-      nearbyHospitals.forEach(value => {
-        var infoBox = setInfoBox(getClickedHospitalsDataFormatted(value.name, Math.floor((Math.random() * 100) + 1), Math.floor((Math.random() * 50) + 1)));
-        var marker = markPosition(value.geometry.location.lat, value.geometry.location.lng, true);
-        $scope.infoBoxs.push(infoBox);
+          getNeabyHospitals($scope.currentPosition.latitude, $scope.currentPositionlongitude);
 
-        marker.addListener('click', function () {
-          if ($scope.infoBoxs) $scope.infoBoxs.forEach(box => box.close());
-          $scope.map.setCenter(this.position);
-          infoBox.open($scope.map, marker);
-        });
+          var nearbyHospitals = getNeabyHospitals().results;
 
-        marker.addListener('dblclick', function () {
-          $scope.map.setCenter(this.position);
-          generateRoute($scope.currentPosition.latitude, $scope.currentPosition.longitude, this.position.lat(), this.position.lng());
-        });
-      });
+          nearbyHospitals.forEach(value => {
+            var infoBox;
+            if (value.place_id == "ChIJyeWaSdMY35QRHvZxbU_D1-A") infoBox = setInfoBox(getClickedHospitalsDataFormatted(value.name, getPatietNumber(apiData.data), !getPatietNumber(apiData.data) ? 0 : Math.floor((Math.random() * 50) + 1)));
+            else infoBox = setInfoBox(getClickedHospitalsDataFormatted(value.name, Math.floor((Math.random() * 100) + 1), Math.floor((Math.random() * 50) + 1)));
+            var marker = markPosition(value.geometry.location.lat, value.geometry.location.lng, true);
+            $scope.infoBoxs.push(infoBox);
+            $scope.markes.push(marker);
 
-      generateRoute($scope.currentPosition.latitude, $scope.currentPosition.longitude, nearbyHospitals[0].geometry.location.lat, nearbyHospitals[0].geometry.location.lng);
+            marker.addListener('click', function () {
+              if ($scope.infoBoxs) $scope.infoBoxs.forEach(box => box.close());
+              $scope.map.setCenter(this.position);
+              infoBox.open($scope.map, marker);
+            });
 
+            marker.addListener('dblclick', function () {
+              $scope.map.setCenter(this.position);
+              generateRoute($scope.currentPosition.latitude, $scope.currentPosition.longitude, this.position.lat(), this.position.lng());
+            });
+          });
+
+          generateRoute($scope.currentPosition.latitude, $scope.currentPosition.longitude, nearbyHospitals[0].geometry.location.lat, nearbyHospitals[0].geometry.location.lng);
+        }
+      );
     };
 
     function markPosition(lat, lng, image = false) {
@@ -920,8 +929,18 @@ angular.module('starter.controllers', [])
 
     function getClickedHospitalsDataFormatted(name, patient, waiting) {
       var html = '<b>' + name + '</b></br>';
-      html += '<b>Total de Pacientes:</b>'+patient+'</br>';
-      html += '<b>Tempo de Espera Médio:</b>'+waiting+'min';
+      html += '<b>Total de Pacientes:</b>' + patient + '</br>';
+      html += '<b>Tempo de Espera Médio:</b>' + waiting + 'min';
       return html;
     }
+
+    function getPatietNumber(apiData) {
+      var number = 0;
+      apiData.forEach(record => {
+        if (record.rule_name == 'Enter') number++;
+        else if (record.rule_name == 'Exit') number--;
+      });
+
+      return number < 0 ? 0 : number;
+    };
   });
