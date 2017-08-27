@@ -1,14 +1,30 @@
 angular.module('starter.controllers', [])
   .controller('MapCtrl', function ($scope, $ionicLoading, $http) {
+    $scope.infoBoxs = [];
     var directionsService;
     var directionsDisplay;
+    var hospitalImg = 'http://maps.google.com/mapfiles/kml/pal4/icon55.png';
 
     $scope.mapCreated = function (map) {
       $scope.map = map;
+
+      google.maps.event.addListenerOnce($scope.map, 'tilesloaded', function () {
+        $scope.loading = $ionicLoading.show({
+          content: 'Getting current location...',
+          showBackdrop: false
+        });
+
+        navigator.geolocation.getCurrentPosition(function (pos) {
+          $scope.currentPosition = pos.coords;
+          markPosition($scope.currentPosition.latitude, $scope.currentPosition.longitude);
+          $scope.loading.hide();
+        }, function (error) {
+          alert('Unable to get location: ' + error.message);
+        });
+      });
     };
 
     $scope.centerOnMe = function () {
-      console.log("Centering");
       if (!$scope.map) {
         return;
       }
@@ -16,38 +32,39 @@ angular.module('starter.controllers', [])
       directionsService = new google.maps.DirectionsService();
       directionsDisplay = new google.maps.DirectionsRenderer();
 
-      $scope.loading = $ionicLoading.show({
-        content: 'Getting current location...',
-        showBackdrop: false
-      });
+      getNeabyHospitals($scope.currentPosition.latitude, $scope.currentPositionlongitude);
 
-      navigator.geolocation.getCurrentPosition(function (pos) {
-        console.log('Got pos', pos);
-        $scope.map.setCenter(new google.maps.LatLng(pos.coords.latitude, pos.coords.longitude));
-        markPosition(pos.coords.latitude, pos.coords.longitude, 'Me');
-        getNeabyHospitals(pos.coords.latitude, pos.coords.longitude);
+      var nearbyHospitals = getNeabyHospitals().results;
 
-        var nearbyHospitals = getNeabyHospitals().results;
+      nearbyHospitals.forEach(value => {
+        var infoBox = setInfoBox(getClickedHospitalsDataFormatted(value.name));
+        var marker = markPosition(value.geometry.location.lat, value.geometry.location.lng, true);
+        $scope.infoBoxs.push(infoBox);
 
-        nearbyHospitals.forEach(function (value) {
-          markPosition(value.geometry.location.lat, value.geometry.location.lng, value.name);
+        marker.addListener('click', function () {
+          if ($scope.infoBoxs) $scope.infoBoxs.forEach(box => box.close());
+          $scope.map.setCenter(this.position);
+          infoBox.open($scope.map, marker);
         });
 
-          generateRoute(pos.coords.latitude, pos.coords.longitude, nearbyHospitals[0].geometry.location.lat, nearbyHospitals[0].geometry.location.lng);
-        $scope.loading.hide();
-
-      }, function (error) {
-        alert('Unable to get location: ' + error.message);
+        marker.addListener('dblclick', function () {
+          $scope.map.setCenter(this.position);
+          generateRoute($scope.currentPosition.latitude, $scope.currentPosition.longitude, this.position.lat(), this.position.lng());
+        });
       });
+
+      generateRoute($scope.currentPosition.latitude, $scope.currentPosition.longitude, nearbyHospitals[0].geometry.location.lat, nearbyHospitals[0].geometry.location.lng);
+
     };
 
-    function markPosition(lat, lng, title = '') {
-      var marker = {};
-      marker.map = $scope.map;
-      marker.position = { lat: lat, lng: lng };
-      if (title) marker.title = title;
-
-      new google.maps.Marker(marker);
+    function markPosition(lat, lng, image = false) {
+      var marker = {
+        map: $scope.map,
+        position: setPosition(lat, lng),
+      };
+      if (image) marker.icon = hospitalImg;
+      $scope.map.setCenter(setPosition(lat, lng));
+      return new google.maps.Marker(marker);
     }
 
     function getNeabyHospitals() {
@@ -145,8 +162,8 @@ angular.module('starter.controllers', [])
 
     function generateRoute(latOrigin, lngOrigin, latDest, lngDest) {
       var directionsRequest = {};
-      directionsRequest.origin = new google.maps.LatLng(latOrigin, lngOrigin);
-      directionsRequest.destination = new google.maps.LatLng(latDest, lngDest);
+      directionsRequest.origin = setPosition(latOrigin, lngOrigin);
+      directionsRequest.destination = setPosition(latDest, lngDest);
       directionsRequest.travelMode = google.maps.TravelMode.DRIVING;
       directionsRequest.unitSystem = google.maps.UnitSystem.METRIC;
       directionsRequest.provideRouteAlternatives = true;
@@ -155,5 +172,22 @@ angular.module('starter.controllers', [])
       return directionsService.route(directionsRequest, function (result, status) {
         if (status == 'OK') directionsDisplay.setDirections(result);
       });
+    }
+
+    function setPosition(lat, lng) {
+      return new google.maps.LatLng(lat, lng);
+    }
+
+    function setInfoBox(contentString) {
+      return new google.maps.InfoWindow({
+        content: contentString
+      });
+    }
+
+    function getClickedHospitalsDataFormatted(name) {
+      var html = '<b>' + name + '</b></br>';
+      html += '<b>Total de Pacientes:</b> 50</br>';
+      html += '<b>Tempo de Espera Médio:</b> 30min';
+      return html;
     }
   });
